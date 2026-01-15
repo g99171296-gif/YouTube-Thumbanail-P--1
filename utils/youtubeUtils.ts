@@ -2,17 +2,32 @@
 import { VideoThumbnail } from '../types';
 
 export const extractVideoId = (url: string): string | null => {
-  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-  const match = url.match(regExp);
+  if (!url) return null;
   
-  // Handle shorts specifically
-  if (!match) {
-    const shortsRegExp = /youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/;
-    const shortsMatch = url.match(shortsRegExp);
-    return (shortsMatch && shortsMatch[1].length === 11) ? shortsMatch[1] : null;
+  // Clean the string from common bulk copy-paste artifacts
+  const cleanUrl = url.trim().replace(/[<>"\s]/g, '');
+
+  // Standard, Mobile, Embed, and Attribution links
+  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+  const match = cleanUrl.match(regExp);
+  
+  if (match && match[7].length === 11) {
+    return match[7];
   }
 
-  return (match && match[7].length === 11) ? match[7] : null;
+  // Shorts links
+  const shortsRegExp = /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/;
+  const shortsMatch = cleanUrl.match(shortsRegExp);
+  if (shortsMatch) {
+    return shortsMatch[1];
+  }
+
+  // Handle direct ID entry (if user just pastes IDs)
+  if (cleanUrl.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanUrl)) {
+    return cleanUrl;
+  }
+
+  return null;
 };
 
 export const createThumbnailObject = (url: string): VideoThumbnail | null => {
@@ -21,8 +36,8 @@ export const createThumbnailObject = (url: string): VideoThumbnail | null => {
 
   return {
     id,
-    url,
-    title: `Video ${id}`, // In a real app we'd fetch the OEmbed title
+    url: url.trim(),
+    title: `Video ${id}`,
     thumbnailUrl: `https://img.youtube.com/vi/${id}/maxresdefault.jpg`,
     resolutions: {
       max: `https://img.youtube.com/vi/${id}/maxresdefault.jpg`,
@@ -36,6 +51,7 @@ export const createThumbnailObject = (url: string): VideoThumbnail | null => {
 export const downloadImage = async (url: string, filename: string) => {
   try {
     const response = await fetch(url);
+    if (!response.ok) throw new Error('Network error');
     const blob = await response.blob();
     const blobUrl = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -46,8 +62,7 @@ export const downloadImage = async (url: string, filename: string) => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(blobUrl);
   } catch (error) {
-    console.error('Download failed', error);
-    // Fallback if CORS prevents blob download
+    console.warn('Direct download failed, opening in new tab', error);
     window.open(url, '_blank');
   }
 };
